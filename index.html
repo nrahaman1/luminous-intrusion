@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Luminous Intrusion</title>
+<meta name="description" content="Interactive atlas of nighttime-light exposure likelihood across U.S. bat habitat, 1992–2022 (Rahaman et al., Landscape Ecology 2024).">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
+<script src="config.js"></script>
+<script src="data.js"></script>
+<style>
+:root{
+  --bg:#070914; --bg2:#0d1122; --card:#111630cc; --card-solid:#121731; --line:#232a4a;
+  --ink:#eef0fb; --ink2:#a3a9c9; --ink3:#6c7399;
+  --glow:#ffc15e; --glow2:#ff7a45; --hot:#ff3d5a; --cold:#5fa8ff; --bat:#b18cff;
+  --r:14px; --gap:14px;
+  --mono:'JetBrains Mono',ui-monospace,monospace; --serif:'Fraunces',Georgia,serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{scrollbar-color:#3b4380 transparent;background:var(--bg);color:var(--ink);font:14px/1.45 Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+body{background:radial-gradient(1200px 600px at 80% -10%,#1c1840 0%,transparent 60%),radial-gradient(900px 500px at -10% 10%,#10203a 0%,transparent 55%),var(--bg);min-height:100vh}
+a{color:var(--glow)}
+button{font:inherit;color:inherit;cursor:pointer}
+
+/* ---------- header ---------- */
+header{display:flex;align-items:center;gap:16px;padding:14px 20px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.brand svg{flex:none;filter:drop-shadow(0 0 10px #ffc15e66)}
+.brand h1{font:700 22px/1.1 var(--serif);letter-spacing:.2px}
+.brand h1 em{font-style:normal;background:linear-gradient(90deg,var(--glow),var(--glow2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.brand p{color:var(--ink2);font-size:12.5px}
+.cite{margin-left:auto;font-size:12px;color:var(--ink3);text-align:right}
+.cite a{color:var(--ink2)}
+
+/* ---------- main grid ---------- */
+main{display:grid;grid-template-columns:minmax(0,1fr) 390px;gap:var(--gap);padding:0 20px 20px}
+.mapwrap{position:relative;height:calc(100vh - 92px);min-height:560px;border-radius:var(--r);overflow:hidden;border:1px solid var(--line);background:#05060d}
+#map{position:absolute;inset:0}
+.side{display:flex;flex-direction:column;gap:var(--gap);height:calc(100vh - 92px);min-height:560px;overflow:auto;scrollbar-width:thin}
+
+/* ---------- map overlays ---------- */
+.glass{background:rgba(10,13,30,.78);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid #2a3158;border-radius:12px}
+.modes{position:absolute;top:12px;left:12px;right:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;pointer-events:none;z-index:2}
+.modes>*{pointer-events:auto}
+.seg{display:flex;padding:3px;gap:2px}
+.seg button{border:0;background:none;padding:7px 11px;border-radius:9px;font-size:12.5px;color:var(--ink2);white-space:nowrap}
+.seg button[aria-pressed=true]{background:linear-gradient(180deg,#2a2f5c,#20244a);color:var(--ink);box-shadow:inset 0 0 0 1px #3b4380}
+.seg button:focus-visible,.search input:focus-visible{outline:2px solid var(--glow);outline-offset:1px}
+.harm{padding:8px 11px;font-size:12.5px;color:var(--ink2);white-space:nowrap}
+.harm[aria-pressed=true]{color:var(--glow);border-color:#ffc15e66;box-shadow:0 0 12px #ffc15e22}
+select.glass{padding:8px 10px;font:inherit;font-size:12.5px;color:var(--ink);appearance:none}
+.search{position:relative;margin-left:auto}
+.search input{width:220px;padding:8px 12px;font:inherit;font-size:12.5px;color:var(--ink);border:1px solid #2a3158;border-radius:12px;background:rgba(10,13,30,.78);backdrop-filter:blur(12px)}
+.search ul{position:absolute;right:0;top:40px;width:260px;list-style:none;max-height:260px;overflow:auto;display:none}
+.search ul li{padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #1d2345}
+.search ul li:hover,.search ul li.act{background:#1d2350}
+
+.legend{position:absolute;left:12px;bottom:112px;padding:10px 12px;max-width:290px;z-index:2;font-size:11.5px}
+.legend h4{font:600 11px/1 Inter;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);margin-bottom:8px}
+.ramp{display:flex;height:10px;border-radius:3px;overflow:hidden}
+.ramp i{flex:1}
+.ticks{display:flex;justify-content:space-between;color:var(--ink3);font:500 10.5px var(--mono);margin-top:4px}
+.cats{display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;max-height:220px;overflow:auto}
+.cats span{display:flex;align-items:center;gap:6px;white-space:nowrap;color:var(--ink2);cursor:pointer}
+.cats span.off{opacity:.35}
+.cats b{width:10px;height:10px;border-radius:2px;flex:none}
+.legend .note{color:var(--ink3);margin-top:6px;font-size:10.5px}
+.legend-toggle{display:none}
+
+/* ---------- timeline ---------- */
+.timeline{position:absolute;left:12px;right:12px;bottom:12px;padding:10px 14px 12px;z-index:2;display:grid;grid-template-columns:auto auto 1fr;gap:4px 14px;align-items:center}
+.play{width:40px;height:40px;border-radius:50%;border:1px solid #3b4380;background:radial-gradient(circle at 30% 30%,#3a3470,#1b1d3d);display:grid;place-items:center}
+.play:hover{box-shadow:0 0 18px #ffc15e55}
+.yr{font:700 34px/1 var(--serif);min-width:92px;background:linear-gradient(180deg,#fff,var(--glow));-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:0 0 22px #ffc15e30}
+.yr small{display:block;font:500 10px/1.2 var(--mono);letter-spacing:.06em;color:var(--ink3);-webkit-text-fill-color:var(--ink3)}
+.track{position:relative;padding-top:24px}
+.bars{position:absolute;top:0;left:0;right:0;height:22px;display:flex;align-items:flex-end;gap:2px;pointer-events:none}
+.bars i{flex:1;background:linear-gradient(180deg,var(--glow),#ff7a4580);border-radius:2px 2px 0 0;opacity:.55;min-height:2px}
+.bars i.on{opacity:1;box-shadow:0 0 10px var(--glow)}
+.sensor{position:absolute;top:-2px;height:26px;border-left:1px dashed #6c7399;font:500 9.5px var(--mono);color:var(--ink3);padding-left:4px;white-space:nowrap}
+input[type=range]{width:100%;-webkit-appearance:none;appearance:none;background:none;height:22px}
+input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(90deg,#2a3158,#565a9b)}
+input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:linear-gradient(90deg,#2a3158,#565a9b)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;margin-top:-8px;border-radius:50%;background:radial-gradient(circle,#fff 0 30%,var(--glow) 60%);box-shadow:0 0 14px var(--glow)}
+input[type=range]::-moz-range-thumb{width:20px;height:20px;border:0;border-radius:50%;background:radial-gradient(circle,#fff 0 30%,var(--glow) 60%);box-shadow:0 0 14px var(--glow)}
+input[type=range]:focus-visible{outline:2px solid var(--glow);border-radius:4px}
+.tl-cap{grid-column:3;display:flex;justify-content:space-between;font:500 10px var(--mono);color:var(--ink3)}
+
+/* hover tip */
+.maplibregl-popup-content{background:rgba(10,13,30,.92);color:var(--ink);border:1px solid #2f3768;border-radius:10px;padding:8px 10px;font-size:12px;box-shadow:0 8px 30px #0008}
+.maplibregl-popup-tip{display:none}
+.tip b{font-weight:600}.tip div{color:var(--ink2);font-family:var(--mono);font-size:11px}
+.maplibregl-ctrl-top-right{top:50px}
+.maplibregl-ctrl-group{background:rgba(10,13,30,.8)!important;border:1px solid #2a3158}
+.maplibregl-ctrl-group button span{filter:invert(1)}
+.maplibregl-ctrl-attrib{background:rgba(10,13,30,.6)!important;color:var(--ink3)}
+.maplibregl-ctrl-attrib a{color:var(--ink2)}
+
+/* ---------- cards ---------- */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px;backdrop-filter:blur(8px)}
+.card h3{font:600 11px/1 Inter;letter-spacing:.09em;text-transform:uppercase;color:var(--ink2);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.card h3 .dot{width:6px;height:6px;border-radius:50%;background:var(--glow);box-shadow:0 0 8px var(--glow)}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.kpi{background:#0b0f24;border:1px solid #1b2146;border-radius:10px;padding:10px 12px}
+.kpi .v{font:700 22px/1.1 var(--serif)}
+.kpi .l{color:var(--ink3);font-size:11px;margin-top:2px}
+.kpi .d{font:500 11px var(--mono);margin-top:4px}
+.up{color:var(--glow2)}.down{color:var(--cold)}
+
+/* county detail */
+#detail{display:none}
+#detail.open{display:block}
+.dhead{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px}
+.dhead h2{font:700 21px/1.15 var(--serif)}
+.dhead .st{color:var(--ink2);font-size:12.5px}
+.close{margin-left:auto;border:1px solid #2a3158;background:#0c1028;border-radius:8px;width:32px;height:32px;flex:none;font-size:18px;line-height:1}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid;margin:2px 0 12px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.stats div{background:#0b0f24;border:1px solid #1b2146;border-radius:10px;padding:8px}
+.stats b{display:block;font:600 16px/1.2 var(--mono)}
+.stats span{font-size:10.5px;color:var(--ink3)}
+.chartbox{position:relative;height:170px;margin-bottom:6px}
+.sub{font:600 11px Inter;color:var(--ink2);margin:10px 0 6px;letter-spacing:.04em;display:flex;justify-content:space-between}
+.sub em{font-style:normal;font-weight:400;color:var(--ink3)}
+.species{display:grid;gap:10px}
+.sp{display:grid;grid-template-columns:34px 1fr;gap:10px;align-items:center}
+.sp .ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;border:1px solid #2a3158}
+.sp .nm{display:flex;justify-content:space-between;font-size:12.5px}
+.sp .nm i{font-style:italic;color:var(--ink3);font-size:11px}
+.sp .bar{height:7px;background:#1a1f40;border-radius:4px;overflow:hidden;margin-top:5px}
+.sp .bar i{display:block;height:100%;border-radius:4px}
+.sp .val{font:500 11px var(--mono);color:var(--ink2);margin-top:3px}
+.hint{color:var(--ink3);font-size:12.5px;display:flex;gap:10px;align-items:center}
+
+/* ---------- analytics ---------- */
+.analytics{padding:0 20px 28px;display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:var(--gap)}
+.analytics .card{min-width:0}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c7{grid-column:span 7}.c12{grid-column:span 12}
+.sectitle{grid-column:1/-1;display:flex;align-items:baseline;gap:12px;margin-top:10px;flex-wrap:wrap}
+.sectitle h2{font:700 24px var(--serif)}
+.sectitle p{color:var(--ink2);font-size:13px}
+.findings{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--gap)}
+.finding .n{font:700 34px/1 var(--serif);color:var(--glow)}
+.finding .n.c{color:var(--cold)}
+.finding p{color:var(--ink2);font-size:12.5px;margin-top:6px}
+.tall{position:relative;height:300px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;font:600 10.5px Inter;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3);padding:8px;border-bottom:1px solid var(--line);cursor:pointer;user-select:none;white-space:nowrap}
+th:hover{color:var(--ink)}
+td{padding:8px;border-bottom:1px solid #1a1f3d}
+td.num{font-family:var(--mono);text-align:right}
+th.num{text-align:right}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:#171c3d}
+.tblwrap{max-height:420px;overflow:auto}
+.pill{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+footer{padding:0 20px 30px;color:var(--ink3);font-size:12px}
+
+/* ---------- responsive ---------- */
+@media (max-width:1180px){
+  main{grid-template-columns:1fr}
+  .mapwrap{height:68vh;min-height:480px}
+  .side{height:auto;min-height:0;display:grid;grid-template-columns:1fr 1fr;overflow:visible;align-items:start}
+  #detail.open{grid-column:1/-1}
+  .c4,.c5,.c7{grid-column:span 6}
+  .findings{grid-template-columns:repeat(2,1fr)}
+  .cite{display:none}
+}
+@media (max-width:760px){
+  header{padding:12px 14px}
+  .brand h1{font-size:18px}.brand p{display:none}
+  main,.analytics,footer{padding-left:10px;padding-right:10px}
+  .mapwrap{height:calc(100svh - 70px);min-height:420px;border-radius:12px}
+  .side{grid-template-columns:1fr}
+  .c4,.c5,.c7{grid-column:span 12}
+  .modes{top:8px;left:8px;right:8px;gap:6px}
+  .seg{overflow-x:auto;max-width:100%;scrollbar-width:none}
+  .seg button{padding:7px 9px;font-size:12px}
+  .search{margin-left:0;flex:1}
+  .search input{width:100%}
+  .search ul{left:0;right:auto;width:100%}
+  .legend{bottom:auto;top:96px;left:8px;max-width:calc(100% - 16px)}
+  .maplibregl-ctrl-top-right{top:90px}
+  .legend.collapsed>*:not(.legend-toggle){display:none}
+  .legend-toggle{display:block;border:0;background:none;color:var(--ink2);font:600 11px Inter;letter-spacing:.08em;text-transform:uppercase;padding:0}
+  .legend:not(.collapsed) .legend-toggle{margin-bottom:6px}
+  .legend-toggle::after{content:' ▾'}.legend.collapsed .legend-toggle::after{content:' ▸'}
+  .seg .x{display:none}
+  .timeline{left:8px;right:8px;bottom:8px;grid-template-columns:auto 1fr;padding:8px 10px}
+  .timeline .yr{font-size:26px;min-width:0;grid-column:2;grid-row:1}
+  .timeline .track{grid-column:1/-1}
+  .tl-cap{grid-column:1/-1}
+  .findings{grid-template-columns:1fr 1fr}
+  .finding .n{font-size:26px}
+  /* county detail becomes a bottom sheet */
+  #detail.open{position:fixed;left:0;right:0;bottom:0;max-height:64svh;overflow:auto;z-index:20;border-radius:18px 18px 0 0;background:var(--card-solid);box-shadow:0 -12px 40px #000c;padding-bottom:calc(16px + env(safe-area-inset-bottom));animation:sheet .25s ease-out}
+  #detail.open::before{content:"";display:block;width:40px;height:4px;border-radius:2px;background:#3b4380;margin:-6px auto 10px}
+  .stats b{font-size:14px}
+}
+@keyframes sheet{from{transform:translateY(40%);opacity:.4}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media print{.modes,.timeline,.legend{display:none}.mapwrap{height:500px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <svg width="44" height="30" viewBox="0 0 64 40" aria-hidden="true"><path fill="#ffc15e" d="M32 12c1.6-3 2.2-6 2.2-6l1.6 4.2h2.4L40 6s.6 3 2.2 6c5-4 13-6 21.8-3-6 1.4-8.6 5.8-9 10-4.2-2.6-8.6-1.6-10.6 1.6-2.6-2-6.6-1.4-8.4 1.6-1.4 1.8-2.4 5-2.4 5s-1-3.2-2.4-5c-1.8-3-5.8-3.6-8.4-1.6-2-3.2-6.4-4.2-10.6-1.6-.4-4.2-3-8.6-9-10 8.8-3 16.8-1 21.8 3z" transform="translate(-4 2)"/></svg>
+    <div><h1>Luminous <em>Intrusion</em></h1><p>Nighttime-light exposure likelihood across U.S. bat habitat · 1992–2022</p></div>
+  </div>
+  <div class="cite">Rahaman, Shermin, López-Carr &amp; Pricope (2024)<br><a href="https://doi.org/10.1007/s10980-024-01997-8" target="_blank" rel="noopener">Landscape Ecology 39:202</a></div>
+</header>
+
+<main>
+  <section class="mapwrap" aria-label="Map">
+    <div id="map"></div>
+    <div class="modes">
+      <div class="seg glass" role="group" aria-label="Map layer">
+        <button data-mode="z" aria-pressed="true">Exposure<span class="x"> likelihood</span></button>
+        <button data-mode="ntl" aria-pressed="false"><span class="x">Nighttime </span>Light</button>
+        <button data-mode="hab" aria-pressed="false"><span class="x">Bat </span>Habitat</button>
+        <button data-mode="pat" aria-pressed="false"><span class="x">Emerging </span>Pattern</button>
+      </div>
+      <button id="harm" class="glass harm" aria-pressed="true" title="VIIRS (2012+) put on the DMSP scale: quantile matching plus a per-county anchor, so the 2012 sensor switch is not shown as a jump. Click for raw published values.">⇄ Harmonized</button>
+      <select id="species" class="glass" aria-label="Species" hidden>
+        <option value="-1">All three species</option>
+        <option value="0">Big brown bat</option>
+        <option value="1">Silver-haired bat</option>
+        <option value="2">Little brown myotis</option>
+      </select>
+      <div class="search">
+        <input id="q" type="search" placeholder="Find a county…" autocomplete="off" aria-label="Search county">
+        <ul id="qres" class="glass" role="listbox"></ul>
+      </div>
+    </div>
+    <div class="legend glass" id="legend"></div>
+    <div class="timeline glass">
+      <button class="play" id="play" aria-label="Play years"><svg width="14" height="14" viewBox="0 0 14 14"><path id="playIcon" fill="#ffc15e" d="M3 1.5v11l9-5.5z"/></svg></button>
+      <div class="yr" id="yr">1992<small id="sensor">DMSP-OLS</small></div>
+      <div class="track">
+        <div class="bars" id="bars" title="Counties with exposure z ≥ 1.96 per year"></div>
+        <div class="sensor" id="sensorMark">VIIRS →</div>
+        <input type="range" id="year" min="1992" max="2022" step="1" value="2022" aria-label="Year">
+      </div>
+      <div class="tl-cap"><span>1992</span><span>bars: counties with exposure z ≥ 1.96</span><span>2022</span></div>
+    </div>
+  </section>
+
+  <aside class="side">
+    <div class="card" id="detail" aria-live="polite"></div>
+    <div class="card" id="kpiCard">
+      <h3><span class="dot"></span><span id="kpiTitle">2022 snapshot</span></h3>
+      <div class="kpis" id="kpis"></div>
+    </div>
+    <div class="card" id="hintCard">
+      <div class="hint"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffc15e" stroke-width="1.6"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Tap any county to open its 31-year light trend and bat-habitat profile.</div>
+    </div>
+    <div class="card">
+      <h3><span class="dot"></span>Most exposed counties · <span id="topYr">2022</span></h3>
+      <div id="topList"></div>
+    </div>
+  </aside>
+</main>
+
+<section class="analytics">
+  <div class="sectitle"><h2>What the paper found</h2><p>Emerging bivariate cluster analysis of nighttime light × total bat habitat, 3,108 contiguous-U.S. counties.</p></div>
+  <div class="c12 findings">
+    <div class="card finding"><div class="n c" id="f1">24.9%</div><p>of bat habitat sits in <b>diminishing cold spots</b> — low-light areas getting darker still.</p></div>
+    <div class="card finding"><div class="n" id="f2">1.4%</div><p>of habitat faces <b>persistent</b> hot-spot exposure, held for ~27 of 31 years.</p></div>
+    <div class="card finding"><div class="n" id="f3">20</div><p><b>intensifying</b> hot-spot counties — Los Angeles, coastal Virginia, New Orleans.</p></div>
+    <div class="card finding"><div class="n" id="f4">28</div><p><b>consecutive</b> hot-spot counties around Los Angeles, Houston, New Orleans, Dallas.</p></div>
+  </div>
+  <div class="card c7"><h3><span class="dot"></span>Share of each species' habitat by emerging pattern (%)</h3><div class="tall"><canvas id="patChart"></canvas></div></div>
+  <div class="card c5"><h3><span class="dot"></span>Counties per emerging pattern</h3><div class="tall"><canvas id="cntChart"></canvas></div></div>
+  <div class="card c7"><h3><span class="dot"></span>National light trajectory</h3><div class="tall"><canvas id="natChart"></canvas></div></div>
+  <div class="card c5"><h3><span class="dot"></span>High–High bivariate clusters (LISA)</h3><div class="tall"><canvas id="hhChart"></canvas></div></div>
+  <div class="card c12">
+    <h3><span class="dot"></span>County explorer · <span id="tblYr">2022</span> <span style="margin-left:auto;text-transform:none;letter-spacing:0;font-weight:400;color:var(--ink3)" id="tblCount"></span></h3>
+    <div class="tblwrap"><table id="tbl"></table></div>
+  </div>
+</section>
+<footer>Data: DMSP-OLS Nighttime Lights v4 (1992–2011, DN 0–63) and VIIRS DNB v1 (2012–2022, nW·cm⁻²·sr⁻¹), county means via Google Earth Engine; habitat from USGS GAP 2001 species models (big brown bat, silver-haired bat, little brown myotis). Exposure likelihood = yearly bivariate local z-score of normalized NTL × normalized habitat area (PySAL); patterns = Emerging Hot Spot (Mann-Kendall) on the z-score cube. The two sensors differ in scale, so compare raw light only within a sensor era.</footer>
+
+<script>
+const Y = DATA.years, C = DATA.counties, PAT = DATA.patterns, FIPS = Object.keys(C);
+const SPECIES = [{n:'Big brown bat',s:'Eptesicus fuscus',c:'#ffb35c'},{n:'Silver-haired bat',s:'Lasionycteris noctivagans',c:'#b18cff'},{n:'Little brown myotis',s:'Myotis lucifugus',c:'#5ad1c5'}];
+const PCOL = {'New Hot Spot':'#ff4d2e','Consecutive Hot Spot':'#ff7a45','Intensifying Hot Spot':'#ff2d6f','Persistent Hot Spot':'#d7263d','Diminishing Hot Spot':'#ffb38a','Sporadic Hot Spot':'#ffd166','Oscillating Hot Spot':'#f4a3c8','Historical Hot Spot':'#b0605a',
+  'New Cold Spot':'#a5ecff','Consecutive Cold Spot':'#6ec3ff','Intensifying Cold Spot':'#2f7bff','Persistent Cold Spot':'#3f56d6','Diminishing Cold Spot':'#6f95c9','Sporadic Cold Spot':'#5ad1c5','Oscillating Cold Spot':'#b39ddb','Historical Cold Spot':'#56698f','No Pattern Detected':'#262b44'};
+const PORDER = ['New Hot Spot','Consecutive Hot Spot','Intensifying Hot Spot','Persistent Hot Spot','Diminishing Hot Spot','Sporadic Hot Spot','Oscillating Hot Spot','Historical Hot Spot','New Cold Spot','Consecutive Cold Spot','Intensifying Cold Spot','Persistent Cold Spot','Diminishing Cold Spot','Sporadic Cold Spot','Oscillating Cold Spot','Historical Cold Spot','No Pattern Detected'];
+const yi = y => y - 1992, isV = y => y >= 2012, unit = y => isV(y) && !st.harm ? 'nW/cm²/sr' : 'DN';
+const fmt = (v, d=2) => v == null ? '–' : (+v).toLocaleString(undefined,{maximumFractionDigits:d, minimumFractionDigits: d > 0 && Math.abs(v) < 100 ? Math.min(d,1) : 0});
+const acres = v => v >= 1e6 ? (v/1e6).toFixed(2)+'M ac' : v >= 1e3 ? (v/1e3).toFixed(0)+'K ac' : Math.round(v)+' ac';
+const habPct = (c, sp) => c.ar ? Math.min(100, c.a[sp] / c.ar * 100) : 0;
+// Species ranges overlap, so "all species" uses the largest single-species footprint.
+const allHab = c => Math.max(...c.a);
+
+/* ---------- scales ---------- */
+const SCALES = {
+  z:   {breaks:[-0.5,0,0.5,1,1.96,3,6], colors:['#1c2f6e','#101430','#1d1b3c','#4b2f4f','#a8483f','#ff7a45','#ffc15e','#fff4c9'], title:'Exposure likelihood (bivariate z)', ticks:['','-0.5','0','0.5','1','1.96','3','6+']},
+  ntlD:{breaks:[1,3,6,10,20,35,55], colors:['#07091a','#1a1b3d','#3a2a5c','#6b3a5f','#b0503f','#f07b3a','#ffc15e','#fff7d6'], title:'Mean nighttime light · DN (DMSP)', ticks:['0','1','3','6','10','20','35','55+']},
+  ntlV:{breaks:[.2,.4,.7,1.2,2.5,6,15], colors:['#07091a','#1a1b3d','#3a2a5c','#6b3a5f','#b0503f','#f07b3a','#ffc15e','#fff7d6'], title:'Mean radiance · nW/cm²/sr (VIIRS)', ticks:['0','.2','.4','.7','1.2','2.5','6','15+']},
+  hab: {breaks:[5,15,30,50,70,90], colors:['#0b0d1f','#1f1b43','#35286b','#553a94','#7c52bd','#a878e0','#d9b8ff'], title:'Habitat share of county (%)', ticks:['0','5','15','30','50','70','90','100']},
+};
+const pick = (s, v) => { if (v == null) return '#0a0c18'; let i = 0; while (i < s.breaks.length && v >= s.breaks[i]) i++; return s.colors[i]; };
+
+/* ---------- state ---------- */
+const st = { year: 2022, mode: 'z', sp: -1, sel: null, hiddenPats: new Set(), harm: true };
+try { const saved = JSON.parse(localStorage.getItem('li-state') || '{}'); if (saved.mode) st.mode = saved.mode; if (saved.sp != null) st.sp = saved.sp; if (saved.harm != null) st.harm = saved.harm; } catch {}
+const save = () => { try { localStorage.setItem('li-state', JSON.stringify({mode: st.mode, sp: st.sp, harm: st.harm})); } catch {} };
+
+/* ---------- per-year aggregates ---------- */
+const HAB_TOTAL = FIPS.reduce((s,f) => s + allHab(C[f]), 0);
+/* ---------- sensor harmonization ----------
+   DMSP (≤2011) and VIIRS (2012+) differ in units, resolution and saturation, so their county distributions jump at 2012.
+   1) Empirical quantile matching: a county at the p-th percentile of 2012 gets the p-th percentile value of 2011.
+      One fixed mapping (fit on 2011↔2012) is applied to every VIIRS year, so change after 2012 is kept.
+   2) Per-county anchor: DMSP saturation/blooming reorders counties (~980 move >10 percentiles at the break vs ~110 in a
+      normal year), so each county's VIIRS series is shifted so its 2012–14 mean equals its 2009–11 DMSP mean.
+   Done for both light and the bivariate z. Light is floored at 0. */
+const sorted = (k, i) => FIPS.map(f => C[f][k][i]).filter(v => v != null).sort((a, b) => a - b);
+const cdf = (a, v) => { const n = a.length - 1; if (v <= a[0]) return 0; if (v >= a[n]) return 1; let lo = 0, hi = n; while (hi - lo > 1) { const m = (lo + hi) >> 1; a[m] <= v ? lo = m : hi = m; } return (lo + (v - a[lo]) / ((a[hi] - a[lo]) || 1)) / n; };
+const quant = (a, p) => { const x = p * (a.length - 1), i = Math.floor(x), j = Math.min(i + 1, a.length - 1); return a[i] + (a[j] - a[i]) * (x - i); };
+for (const k of ['l', 'z']) {
+  const from = sorted(k, 20), to = sorted(k, 19);
+  const mean = a => { const v = a.filter(x => x != null); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : 0; };
+  for (const f of FIPS) {
+    const c = C[f], h = c[k].map((v, i) => i < 20 || v == null ? v : quant(to, cdf(from, v)));
+    const off = mean(c[k].slice(17, 20)) - mean(h.slice(20, 23));
+    c[k + 'r'] = c[k];
+    c[k + 'h'] = h.map((v, i) => i < 20 || v == null ? v : k === 'l' ? Math.max(0, v + off) : v + off);
+  }
+}
+function applyHarm() {
+  for (const f of FIPS) { const c = C[f]; c.l = st.harm ? c.lh : c.lr; c.z = st.harm ? c.zh : c.zr; }
+  AGG = aggregate();
+}
+let AGG;
+const aggregate = () => Y.map((y, i) => {
+  let hot = 0, hotHab = 0, sum = 0, n = 0, zs = [];
+  for (const f of FIPS) { const c = C[f], z = c.z[i], l = c.l[i];
+    if (l != null) { sum += l; n++; }
+    if (z != null) { zs.push(z); if (z >= 1.96) { hot++; hotHab += allHab(c); } } }
+  zs.sort((a,b) => a-b);
+  return { hot, hotHab, mean: sum / n, zs };
+});
+applyHarm();
+const pctRank = (i, z) => { const a = AGG[i].zs; let lo = 0, hi = a.length; while (lo < hi) { const m = (lo+hi) >> 1; a[m] < z ? lo = m+1 : hi = m; } return lo / a.length * 100; };
+
+/* ---------- map ---------- */
+const tiles = typeof MAPBOX_TOKEN === 'string' && MAPBOX_TOKEN
+  ? { tiles: [`https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/256/{z}/{x}/{y}@2x?access_token=${MAPBOX_TOKEN}`], attribution: '© <a href="https://www.mapbox.com/about/maps/">Mapbox</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }
+  : { tiles: ['https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}@2x.png'], attribution: '© <a href="https://carto.com/">CARTO</a> © OpenStreetMap' };
+const small = matchMedia('(max-width:760px)').matches;
+const map = new maplibregl.Map({
+  container: 'map', attributionControl: { compact: true },
+  style: { version: 8, sources: { base: { type: 'raster', tileSize: 256, ...tiles } }, layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#05060d' } }, { id: 'base', type: 'raster', source: 'base', paint: { 'raster-opacity': .9 } }] },
+  bounds: [[-125, 24.3], [-66.9, 49.5]], fitBoundsOptions: { padding: small ? { top: 70, bottom: 120, left: 10, right: 10 } : { top: 60, bottom: 130, left: 40, right: 40 } },
+  maxBounds: [[-150, 10], [-45, 62]], dragRotate: false, pitchWithRotate: false,
+});
+map.touchZoomRotate.disableRotation();
+map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+const tip = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 12, maxWidth: '240px' });
+
+let GJ;
+map.on('load', async () => {
+  const topo = await fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/counties-10m.json').then(r => r.json());
+  GJ = topojson.feature(topo, topo.objects.counties);
+  GJ.features = GJ.features.filter(f => C[f.id]);
+  GJ.features.forEach(f => f.properties.id = f.id);
+  const states = topojson.mesh(topo, topo.objects.states, (a, b) => a !== b);
+  map.addSource('c', { type: 'geojson', data: GJ, promoteId: 'id' });
+  map.addSource('s', { type: 'geojson', data: states });
+  map.addLayer({ id: 'fill', type: 'fill', source: 'c', paint: {
+    'fill-color': ['coalesce', ['feature-state', 'c'], '#0a0c18'],
+    'fill-opacity': ['case', ['boolean', ['feature-state', 'dim'], false], .12, .86] } });
+  map.addLayer({ id: 'glow', type: 'line', source: 'c', paint: { 'line-color': '#ffc15e', 'line-blur': 3,
+    'line-width': ['case', ['boolean', ['feature-state', 'sel'], false], 7, 0], 'line-opacity': .7 } });
+  map.addLayer({ id: 'edge', type: 'line', source: 'c', paint: {
+    'line-color': ['case', ['boolean', ['feature-state', 'sel'], false], '#fff', ['boolean', ['feature-state', 'hov'], false], '#ffe2a8', '#0b0e22'],
+    'line-width': ['case', ['boolean', ['feature-state', 'sel'], false], 2, ['boolean', ['feature-state', 'hov'], false], 1.5, .25] } });
+  map.addLayer({ id: 'states', type: 'line', source: 's', paint: { 'line-color': '#8a90c0', 'line-opacity': .45, 'line-width': .8 } });
+  paint();
+  let hov = null;
+  const setHov = id => { if (hov) map.setFeatureState({ source: 'c', id: hov }, { hov: false }); hov = id; if (id) map.setFeatureState({ source: 'c', id }, { hov: true }); };
+  map.on('mousemove', 'fill', e => {
+    const id = e.features[0].id; map.getCanvas().style.cursor = 'pointer';
+    if (id !== hov) setHov(id);
+    const c = C[id], i = yi(st.year);
+    tip.setLngLat(e.lngLat).setHTML(`<div class="tip"><b>${c.n}, ${c.s}</b><div>z ${fmt(c.z[i])} · light ${fmt(c.l[i])} ${unit(st.year)}</div><div>${PAT[c.p]}</div></div>`).addTo(map);
+  });
+  map.on('mouseleave', 'fill', () => { setHov(null); tip.remove(); map.getCanvas().style.cursor = ''; });
+  map.on('click', 'fill', e => select(e.features[0].id));
+  if (location.hash.length === 6 && C[location.hash.slice(1)]) select(location.hash.slice(1), true);
+});
+
+function valueOf(c, i) {
+  if (st.mode === 'z') return c.z[i];
+  if (st.mode === 'ntl') return c.l[i];
+  if (st.mode === 'hab') return st.sp < 0 ? (c.ar ? Math.min(100, allHab(c) / c.ar * 100) : 0) : habPct(c, st.sp);
+}
+function scale() { return st.mode === 'ntl' ? (isV(st.year) && !st.harm ? SCALES.ntlV : SCALES.ntlD) : SCALES[st.mode]; }
+function paint() {
+  if (!map.getSource('c')) return;
+  const i = yi(st.year), s = scale();
+  for (const f of FIPS) {
+    const c = C[f], pat = PAT[c.p];
+    const col = st.mode === 'pat' ? PCOL[pat] : pick(s, valueOf(c, i));
+    map.setFeatureState({ source: 'c', id: f }, { c: col, dim: st.mode === 'pat' && st.hiddenPats.has(pat) });
+  }
+}
+
+/* ---------- legend ---------- */
+function legend() {
+  const el = document.getElementById('legend');
+  const tog = `<button class="legend-toggle" onclick="this.parentNode.classList.toggle('collapsed')">Legend</button>`;
+  if (st.mode === 'pat') {
+    const counts = {}; FIPS.forEach(f => counts[PAT[C[f].p]] = (counts[PAT[C[f].p]] || 0) + 1);
+    el.innerHTML = tog + `<h4>Emerging pattern · 1992–2022</h4><div class="cats">${PORDER.map(p => `<span data-p="${p}" class="${st.hiddenPats.has(p) ? 'off' : ''}" title="${counts[p] || 0} counties"><b style="background:${PCOL[p]}"></b>${p.replace(' Spot','').replace(' Detected','')}</span>`).join('')}</div><div class="note">Tap a category to fade it. Pattern summarises the full 31-year cube, so the slider doesn't change it.</div>`;
+    el.querySelectorAll('[data-p]').forEach(s => s.onclick = () => { const p = s.dataset.p; st.hiddenPats.has(p) ? st.hiddenPats.delete(p) : st.hiddenPats.add(p); paint(); legend(); });
+    return;
+  }
+  const s = scale();
+  let note = st.mode === 'z' ? 'High z: county and its neighbours combine large bat habitat with bright nights. z ≥ 1.96 ≈ significant.' :
+             st.mode === 'ntl' && st.harm && isV(st.year) ? 'VIIRS radiance on the DMSP DN scale: quantile-matched, then each county anchored to its 2009–11 level.' :
+             st.mode === 'z' && st.harm && isV(st.year) ? 'VIIRS-era z quantile-matched to 2011 and anchored per county, so the sensor switch is not read as change.' :
+             st.mode === 'ntl' ? (isV(st.year) ? 'VIIRS era (2012+): finer 464 m radiance.' : 'DMSP era (≤2011): 928 m, saturates at 63.') : 'GAP 2001 modelled habitat area ÷ county land area.';
+  el.innerHTML = tog + `<h4>${s.title}</h4><div class="ramp">${s.colors.map(c => `<i style="background:${c}"></i>`).join('')}</div><div class="ticks">${s.ticks.map(t => `<span>${t}</span>`).join('')}</div><div class="note">${note}</div>`;
+}
+if (small) document.getElementById('legend').classList.add('collapsed');
+
+/* ---------- timeline ---------- */
+const bars = document.getElementById('bars');
+function drawBars() { const maxHot = Math.max(...AGG.map(a => a.hot)); bars.innerHTML = AGG.map((a, i) => `<i class="${i === yi(st.year) ? 'on' : ''}" style="height:${Math.max(8, a.hot / maxHot * 100)}%" title="${Y[i]}: ${a.hot} counties"></i>`).join(''); }
+drawBars();
+const slider = document.getElementById('year');
+const posSensor = () => { const w = slider.clientWidth - 20; document.getElementById('sensorMark').style.left = (10 + w * (2011.5 - 1992) / 30) + 'px'; };
+new ResizeObserver(posSensor).observe(slider);
+slider.oninput = () => setYear(+slider.value);
+let timer = null;
+document.getElementById('play').onclick = () => {
+  if (timer) return stop();
+  if (st.mode === 'pat') setMode('z');
+  if (st.year === 2022) setYear(1992);
+  document.getElementById('playIcon').setAttribute('d', 'M3 2h3v10H3zM8 2h3v10H8z');
+  timer = setInterval(() => st.year >= 2022 ? stop() : setYear(st.year + 1), 650);
+};
+function stop() { clearInterval(timer); timer = null; document.getElementById('playIcon').setAttribute('d', 'M3 1.5v11l9-5.5z'); }
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input,select')) return;
+  if (e.key === 'ArrowRight') setYear(Math.min(2022, st.year + 1));
+  if (e.key === 'ArrowLeft') setYear(Math.max(1992, st.year - 1));
+  if (e.key === 'Escape') closeDetail();
+});
+
+function setYear(y) {
+  st.year = y; slider.value = y;
+  document.getElementById('yr').firstChild.nodeValue = y;
+  document.getElementById('sensor').textContent = isV(y) ? (st.harm ? 'VIIRS → DMSP scale' : 'VIIRS DNB') : 'DMSP-OLS';
+  [...bars.children].forEach((b, i) => b.classList.toggle('on', i === yi(y)));
+  if (st.mode !== 'pat') paint();
+  legend(); kpis(); topList(); table();
+  if (st.sel) detail(st.sel);
+  for (const ch of [natChart]) ch && ch.update('none');
+}
+function setMode(m) {
+  st.mode = m; save();
+  document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === m));
+  document.getElementById('species').hidden = m !== 'hab';
+  paint(); legend();
+}
+document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => setMode(b.dataset.mode));
+const spSel = document.getElementById('species'); spSel.value = st.sp;
+spSel.onchange = () => { st.sp = +spSel.value; save(); paint(); };
+
+const harmBtn = document.getElementById('harm');
+const syncHarm = () => { harmBtn.setAttribute('aria-pressed', st.harm); harmBtn.textContent = st.harm ? '⇄ Harmonized' : '⇄ Raw sensors'; };
+syncHarm();
+harmBtn.onclick = () => { st.harm = !st.harm; save(); syncHarm(); applyHarm(); drawBars(); drawNat(); paint(); setYear(st.year); };
+
+/* ---------- KPIs ---------- */
+function kpis() {
+  const i = yi(st.year), a = AGG[i], p = i ? AGG[i - 1] : null;
+  const d = (cur, prev, f = v => v) => { if (!p || (i === 20 && !st.harm)) return `<div class="d" style="color:var(--ink3)">${p ? 'sensor switch' : 'baseline year'}</div>`; const x = cur - prev; return `<div class="d ${x >= 0 ? 'up' : 'down'}">${x >= 0 ? '▲' : '▼'} ${f(Math.abs(x))} vs ${st.year - 1}</div>`; };
+  let top = null; for (const f of FIPS) { const z = C[f].z[i]; if (z != null && (!top || z > C[top].z[i])) top = f; }
+  document.getElementById('kpiTitle').textContent = `${st.year} snapshot`;
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi"><div class="v" style="color:var(--glow)">${a.hot}</div><div class="l">counties with exposure z ≥ 1.96</div>${d(a.hot, p?.hot, v => v)}</div>
+    <div class="kpi"><div class="v">${(a.hotHab / HAB_TOTAL * 100).toFixed(1)}%</div><div class="l">of bat habitat inside them</div>${d(a.hotHab / HAB_TOTAL * 100, p ? p.hotHab / HAB_TOTAL * 100 : 0, v => v.toFixed(1) + ' pt')}</div>
+    <div class="kpi"><div class="v">${fmt(a.mean)}</div><div class="l">mean county light (${unit(st.year)})</div>${d(a.mean, p?.mean, v => v.toFixed(2))}</div>
+    <div class="kpi" style="cursor:pointer" onclick="select('${top}')"><div class="v" style="font-size:16px;line-height:1.25">${C[top].n.replace(' County','')}, ${C[top].s}</div><div class="l">highest exposure · z ${fmt(C[top].z[i])}</div></div>`;
+}
+
+/* ---------- top list & table ---------- */
+function ranked() { const i = yi(st.year); return FIPS.filter(f => C[f].z[i] != null).sort((a, b) => C[b].z[i] - C[a].z[i]); }
+function topList() {
+  const i = yi(st.year); document.getElementById('topYr').textContent = st.year;
+  const r = ranked().slice(0, 8), mx = C[r[0]].z[i];
+  document.getElementById('topList').innerHTML = r.map((f, k) => `<div onclick="select('${f}')" style="cursor:pointer;display:grid;grid-template-columns:18px 1fr auto;gap:8px;align-items:center;padding:5px 0;font-size:12.5px"><span style="color:var(--ink3);font-family:var(--mono)">${k + 1}</span><div><div>${C[f].n}, ${C[f].s}</div><div style="height:4px;border-radius:2px;margin-top:4px;background:linear-gradient(90deg,#ff7a45,#ffc15e);width:${C[f].z[i] / mx * 100}%;box-shadow:0 0 8px #ffc15e66"></div></div><b style="font-family:var(--mono);font-weight:500">${fmt(C[f].z[i])}</b></div>`).join('');
+}
+const COLS = [
+  { k: 'n', l: 'County', g: (c) => `${c.n}, ${c.s}` },
+  { k: 'z', l: 'Exposure z', num: 1, g: (c, i) => c.z[i] },
+  { k: 'l', l: 'Light', num: 1, g: (c, i) => c.l[i] },
+  { k: 'dz', l: 'Δz since 1992', num: 1, g: (c, i) => c.z[i] != null && c.z[0] != null ? c.z[i] - c.z[0] : null },
+  { k: 'h', l: 'Habitat', num: 1, g: c => allHab(c), f: acres },
+  { k: 'p', l: 'Emerging pattern', g: c => PAT[c.p] },
+];
+let sortK = 'z', sortD = -1, tblFilter = '';
+function table() {
+  const i = yi(st.year); document.getElementById('tblYr').textContent = st.year;
+  let rows = FIPS.map(f => ({ f, v: COLS.map(col => col.g(C[f], i)) }));
+  if (tblFilter) rows = rows.filter(r => (r.v[0] + ' ' + r.v[5]).toLowerCase().includes(tblFilter));
+  const ci = COLS.findIndex(c => c.k === sortK);
+  rows.sort((a, b) => { const x = a.v[ci], y = b.v[ci]; if (x == null) return 1; if (y == null) return -1; return (x < y ? -1 : x > y ? 1 : 0) * sortD; });
+  document.getElementById('tblCount').textContent = `showing ${Math.min(150, rows.length)} of ${rows.length}`;
+  document.getElementById('tbl').innerHTML = `<thead><tr>${COLS.map(c => `<th class="${c.num ? 'num' : ''}" data-k="${c.k}">${c.l}${c.k === 'l' ? ` (${unit(st.year)})` : ''}${sortK === c.k ? (sortD > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr></thead><tbody>${rows.slice(0, 150).map(r => `<tr data-f="${r.f}">${r.v.map((v, j) => COLS[j].num ? `<td class="num">${COLS[j].f ? COLS[j].f(v) : fmt(v)}</td>` : j === 5 ? `<td><span class="pill" style="background:${PCOL[v]}"></span>${v}</td>` : `<td>${v}</td>`).join('')}</tr>`).join('')}</tbody>`;
+  document.querySelectorAll('#tbl th').forEach(th => th.onclick = () => { sortD = sortK === th.dataset.k ? -sortD : -1; sortK = th.dataset.k; table(); });
+  document.querySelectorAll('#tbl tbody tr').forEach(tr => tr.onclick = () => { select(tr.dataset.f); document.querySelector('.mapwrap').scrollIntoView({ behavior: 'smooth' }); });
+}
+
+/* ---------- search ---------- */
+const q = document.getElementById('q'), qres = document.getElementById('qres');
+const IDX = FIPS.map(f => [f, `${C[f].n}, ${C[f].s}`, `${C[f].n} ${C[f].s}`.toLowerCase()]);
+q.oninput = () => {
+  const t = q.value.trim().toLowerCase(); tblFilter = t; table();
+  if (t.length < 2) { qres.style.display = 'none'; return; }
+  const hits = IDX.filter(x => x[2].includes(t)).slice(0, 12);
+  qres.innerHTML = hits.map(h => `<li role="option" data-f="${h[0]}">${h[1]}</li>`).join('') || '<li>No match</li>';
+  qres.style.display = 'block';
+  qres.querySelectorAll('[data-f]').forEach(li => li.onclick = () => { select(li.dataset.f); qres.style.display = 'none'; q.blur(); });
+};
+q.onkeydown = e => { if (e.key === 'Enter') { const li = qres.querySelector('[data-f]'); li && li.click(); } };
+document.addEventListener('click', e => { if (!e.target.closest('.search')) qres.style.display = 'none'; });
+
+/* ---------- county detail ---------- */
+let trendChart, zChart;
+function bbox(geom) { let b = [180, 90, -180, -90]; const walk = a => typeof a[0] === 'number' ? (b = [Math.min(b[0], a[0]), Math.min(b[1], a[1]), Math.max(b[2], a[0]), Math.max(b[3], a[1])]) : a.forEach(walk); walk(geom.coordinates); return [[b[0], b[1]], [b[2], b[3]]]; }
+function select(f, noFly) {
+  if (!C[f]) return;
+  if (st.sel && map.getSource('c')) map.setFeatureState({ source: 'c', id: st.sel }, { sel: false });
+  st.sel = f; history.replaceState(null, '', '#' + f);
+  if (map.getSource('c')) {
+    map.setFeatureState({ source: 'c', id: f }, { sel: true });
+    const feat = GJ.features.find(x => x.id === f);
+    if (feat && !noFly) map.fitBounds(bbox(feat.geometry), { padding: small ? { top: 80, bottom: innerHeight * .55, left: 40, right: 40 } : 140, maxZoom: 7.2, duration: 900 });
+  }
+  detail(f);
+}
+function closeDetail() {
+  const el = document.getElementById('detail'); el.classList.remove('open');
+  document.getElementById('hintCard').style.display = '';
+  if (st.sel && map.getSource('c')) map.setFeatureState({ source: 'c', id: st.sel }, { sel: false });
+  st.sel = null; history.replaceState(null, '', location.pathname);
+}
+function detail(f) {
+  const c = C[f], i = yi(st.year), el = document.getElementById('detail'), pat = PAT[c.p], pc = PCOL[pat];
+  document.getElementById('hintCard').style.display = 'none';
+  const pr = c.z[i] != null ? pctRank(i, c.z[i]) : null;
+  const dmsp = c.l.slice(0, 20).filter(v => v != null), viirs = c.l.slice(20).filter(v => v != null);
+  const chg = (a) => a.length > 1 && a[0] > 0 ? ((a[a.length - 1] / a[0] - 1) * 100) : null;
+  const cd = chg(dmsp), cv = chg(viirs);
+  const spRows = SPECIES.map((s, k) => { const pct = habPct(c, k); return `<div class="sp"><div class="ic" style="background:${s.c}18;border-color:${s.c}55"><svg width="22" height="14" viewBox="0 0 64 40"><path fill="${s.c}" d="M32 12c1.6-3 2.2-6 2.2-6l1.6 4.2h2.4L40 6s.6 3 2.2 6c5-4 13-6 21.8-3-6 1.4-8.6 5.8-9 10-4.2-2.6-8.6-1.6-10.6 1.6-2.6-2-6.6-1.4-8.4 1.6-1.4 1.8-2.4 5-2.4 5s-1-3.2-2.4-5c-1.8-3-5.8-3.6-8.4-1.6-2-3.2-6.4-4.2-10.6-1.6-.4-4.2-3-8.6-9-10 8.8-3 16.8-1 21.8 3z" transform="translate(-4 2)"/></svg></div><div><div class="nm"><span>${s.n}</span><i>${s.s}</i></div><div class="bar"><i style="width:${pct}%;background:${s.c};box-shadow:0 0 8px ${s.c}88"></i></div><div class="val">${pct.toFixed(1)}% of county · ${acres(c.a[k])}</div></div></div>`; }).join('');
+  el.innerHTML = `
+    <div class="dhead"><div><h2>${c.n}</h2><div class="st">${c.s} · FIPS ${f}${c.pop ? ' · pop. ' + c.pop.toLocaleString() : ''}</div></div><button class="close" aria-label="Close" onclick="closeDetail()">×</button></div>
+    <span class="badge" style="color:${pc === '#262b44' ? '#a3a9c9' : pc};border-color:${pc === '#262b44' ? '#3b4380' : pc}66;background:${pc}14">● ${pat}</span>
+    <div class="stats">
+      <div><b style="color:var(--glow)">${fmt(c.z[i])}</b><span>exposure z · ${st.year}</span></div>
+      <div><b>${pr == null ? '–' : Math.round(pr) + '<small style="font-size:10px">th</small>'}</b><span>percentile nationally</span></div>
+      <div><b>${fmt(c.l[i])}</b><span>light (${unit(st.year)})</span></div>
+    </div>
+    <div class="sub"><span>Nighttime-light trend</span><em>${cd != null ? `DMSP ${cd >= 0 ? '+' : ''}${cd.toFixed(0)}%` : ''}${cv != null ? ` · VIIRS ${cv >= 0 ? '+' : ''}${cv.toFixed(0)}%` : ''}</em></div>
+    <div class="chartbox"><canvas id="trend"></canvas></div>
+    <div class="sub"><span>Exposure likelihood (bivariate z)</span><em>≥ 1.96 shaded</em></div>
+    <div class="chartbox" style="height:130px"><canvas id="ztrend"></canvas></div>
+    <div class="sub"><span>Bat distribution (GAP 2001)</span><em>${acres(allHab(c))} max footprint</em></div>
+    <div class="species">${spRows}</div>`;
+  el.classList.add('open');
+  if (!small) el.scrollIntoView({ block: 'nearest' });
+  trendChart && trendChart.destroy(); zChart && zChart.destroy();
+  const mark = { id: 'mark', afterDatasetsDraw(ch) { const x = ch.scales.x.getPixelForValue(yi(st.year)), a = ch.chartArea, g = ch.ctx; g.save(); g.strokeStyle = '#ffc15e'; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(x, a.top); g.lineTo(x, a.bottom); g.stroke(); g.restore(); } };
+  trendChart = new Chart(document.getElementById('trend'), {
+    type: 'line', plugins: [mark],
+    data: { labels: Y, datasets: [
+      { label: 'DMSP (DN)', data: c.l.map((v, k) => k < 20 ? v : null), borderColor: '#ffc15e', backgroundColor: '#ffc15e22', fill: true, yAxisID: 'y', tension: .3, pointRadius: 0, borderWidth: 2 },
+      { label: st.harm ? 'VIIRS → DN (harmonized)' : 'VIIRS (nW/cm²/sr)', data: c.l.map((v, k) => k >= (st.harm ? 19 : 20) ? v : null), borderColor: '#ff7a45', backgroundColor: '#ff7a4522', fill: true, yAxisID: st.harm ? 'y' : 'y2', tension: .3, pointRadius: 0, borderWidth: 2 }] },
+    options: chartOpts(st.harm ? { y: { position: 'left', title: 'DN' } } : { y: { position: 'left', title: 'DN' }, y2: { position: 'right', title: 'nW', grid: false } }),
+  });
+  zChart = new Chart(document.getElementById('ztrend'), {
+    type: 'bar', plugins: [mark],
+    data: { labels: Y, datasets: [{ label: 'z', data: c.z, backgroundColor: c.z.map(v => v == null ? 'transparent' : v >= 1.96 ? '#ffc15e' : v >= 0 ? '#ff7a4599' : '#5fa8ff99'), borderRadius: 2 }] },
+    options: chartOpts({ y: { position: 'left' } }, false),
+  });
+}
+
+/* ---------- charts ---------- */
+Chart.defaults.color = '#a3a9c9'; Chart.defaults.font.family = 'Inter, system-ui, sans-serif'; Chart.defaults.font.size = 11;
+Chart.defaults.borderColor = '#1d2345';
+function chartOpts(axes, legendOn = true) {
+  const scales = { x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 7 } } };
+  for (const [k, a] of Object.entries(axes)) scales[k] = { position: a.position, grid: { display: a.grid !== false, color: '#1a2042' }, ticks: { maxTicksLimit: 5 }, title: a.title ? { display: true, text: a.title, font: { size: 10 } } : undefined };
+  return { responsive: true, maintainAspectRatio: false, animation: false, interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { display: legendOn, position: 'top', align: 'end', labels: { boxWidth: 8, boxHeight: 8, usePointStyle: true } }, tooltip: { backgroundColor: '#0c1028', borderColor: '#2f3768', borderWidth: 1 } }, scales };
+}
+// Habitat share by pattern (from paper table)
+const HBP = DATA.habitatByPattern.filter(r => r[0] !== 'No Pattern Detected').sort((a, b) => PORDER.indexOf(a[0]) - PORDER.indexOf(b[0]));
+new Chart(document.getElementById('patChart'), {
+  type: 'bar',
+  data: { labels: HBP.map(r => r[0].replace(' Spot', '')), datasets: SPECIES.map((s, k) => ({ label: s.n, data: HBP.map(r => r[k + 1]), backgroundColor: s.c + 'cc', borderRadius: 3 })) },
+  options: { ...chartOpts({ y: { position: 'left' } }), indexAxis: 'y', scales: { x: { type: 'logarithmic', grid: { color: '#1a2042' }, ticks: { callback: v => [0.01, 0.1, 1, 10, 30].includes(v) ? v + '%' : '' } }, y: { grid: { display: false }, ticks: { autoSkip: false, color: ctx => PCOL[HBP[ctx.index]?.[0]] || '#a3a9c9' } } } },
+});
+// Counties per pattern
+const PC = PORDER.filter(p => p !== 'No Pattern Detected').map(p => [p, FIPS.filter(f => PAT[C[f].p] === p).length]);
+new Chart(document.getElementById('cntChart'), {
+  type: 'doughnut',
+  data: { labels: PC.map(p => p[0]), datasets: [{ data: PC.map(p => p[1]), backgroundColor: PC.map(p => PCOL[p[0]]), borderColor: '#0d1122', borderWidth: 2 }] },
+  options: { responsive: true, maintainAspectRatio: false, cutout: '62%', animation: false,
+    onClick: (e, els) => { if (!els.length) return; const p = PC[els[0].index][0]; st.hiddenPats = new Set(PORDER.filter(x => x !== p)); setMode('pat'); document.querySelector('.mapwrap').scrollIntoView({ behavior: 'smooth' }); },
+    plugins: { legend: { position: small ? 'bottom' : 'right', labels: { boxWidth: 8, boxHeight: 8, usePointStyle: true, font: { size: 10.5 } } }, tooltip: { callbacks: { label: c => ` ${c.label}: ${c.parsed} counties` } } } },
+});
+// National trajectory
+const hotYr = { id: 'hy', afterDatasetsDraw(ch) { const x = ch.scales.x.getPixelForValue(yi(st.year)), a = ch.chartArea, g = ch.ctx; g.save(); g.fillStyle = '#ffc15e18'; g.fillRect(x - 8, a.top, 16, a.bottom - a.top); g.restore(); } };
+let natChart = null;
+function drawNat() {
+natChart && natChart.destroy();
+natChart = new Chart(document.getElementById('natChart'), {
+  type: 'bar', plugins: [hotYr],
+  data: { labels: Y, datasets: [
+    { type: 'line', label: 'Mean light · DMSP (DN)', data: AGG.map((a, k) => k < 20 ? a.mean : null), borderColor: '#ffc15e', yAxisID: 'y2', pointRadius: 0, tension: .3, borderWidth: 2 },
+    { type: 'line', label: st.harm ? 'Mean light · VIIRS → DN' : 'Mean light · VIIRS (nW)', data: AGG.map((a, k) => k >= (st.harm ? 19 : 20) ? a.mean : null), borderColor: '#ff7a45', yAxisID: st.harm ? 'y2' : 'y3', pointRadius: 0, tension: .3, borderWidth: 2 },
+    { label: 'Counties z ≥ 1.96', data: AGG.map(a => a.hot), backgroundColor: '#b18cff55', borderRadius: 3, yAxisID: 'y' }] },
+  options: { ...chartOpts({ y: { position: 'left', title: 'counties' }, y2: { position: 'right', title: 'DN', grid: false }, ...(st.harm ? {} : { y3: { position: 'right', title: 'nW', grid: false } }) }),
+    onClick: (e, els) => els.length && setYear(Y[els[0].index]) },
+});
+}
+drawNat();
+new Chart(document.getElementById('hhChart'), {
+  type: 'line',
+  data: { labels: DATA.highHigh.map(r => r[0]), datasets: [{ label: 'High–High counties', data: DATA.highHigh.map(r => r[1]), borderColor: '#ff3d5a', backgroundColor: '#ff3d5a22', fill: true, tension: .2, pointRadius: 3, pointBackgroundColor: '#ff3d5a' }] },
+  options: chartOpts({ y: { position: 'left' } }, false),
+});
+
+/* ---------- init ---------- */
+setMode(st.mode); setYear(2022);
+</script>
+</body>
+</html>
