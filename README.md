@@ -101,7 +101,7 @@ After harmonization, the 2011→2012 transition looks like an ordinary year: the
 - Nighttime light: DMSP-OLS Nighttime Lights Time Series v4; VIIRS Day/Night Band Composites v1 (Earth Observation Group, via Google Earth Engine)
 - Habitat: USGS Gap Analysis Project species habitat models (2001)
 - County boundaries: U.S. Census Bureau via [us-atlas](https://github.com/topojson/us-atlas)
-- Basemap: © CARTO, © OpenStreetMap contributors
+- Basemap: Esri World Dark Gray Canvas (© Esri, HERE, Garmin, © OpenStreetMap contributors)
 
 ## License
 MIT. See [LICENSE](LICENSE).

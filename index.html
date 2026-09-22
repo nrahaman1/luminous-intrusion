@@ -354,7 +354,7 @@ const pctRank = (i, z) => { const a = AGG[i].zs; let lo = 0, hi = a.length; whil
 /* ---------- map ---------- */
 const tiles = typeof MAPBOX_TOKEN === 'string' && MAPBOX_TOKEN
   ? { tiles: [`https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/256/{z}/{x}/{y}@2x?access_token=${MAPBOX_TOKEN}`], attribution: '© <a href="https://www.mapbox.com/about/maps/">Mapbox</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }
-  : { tiles: ['https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}@2x.png'], attribution: '© <a href="https://carto.com/">CARTO</a> © OpenStreetMap' };
+  : { tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'], maxzoom: 16, attribution: 'Basemap © <a href="https://www.esri.com/">Esri</a>, HERE, Garmin, © OpenStreetMap contributors' };
 const small = matchMedia('(max-width:760px)').matches;
 const map = new maplibregl.Map({
   container: 'map', attributionControl: { compact: true },
